@@ -36,6 +36,7 @@ function App() {
   const [selectedBlockId, setSelectedBlockId] = useState("");
   const [writeSource, setWriteSource] = useState(sampleMermaid);
   const [colorScheme, setColorScheme] = useState(colorSchemes[0].id);
+  const [fileError, setFileError] = useState("");
   const selectedBlock = blocks.find((block) => block.id === selectedBlockId) ??
     null;
   const selectedScheme =
@@ -80,11 +81,37 @@ function App() {
     loadMarkdownText(file.name, text);
   }
 
+  async function handleLoadPath(path) {
+    const trimmed = path.trim();
+    if (!trimmed) {
+      setFileError("Enter a Markdown file or directory path.");
+      return;
+    }
+
+    try {
+      setFileError("");
+      const response = await fetch(
+        "/api/read-markdown?path=" + encodeURIComponent(trimmed),
+      );
+      const data = await response.json();
+
+      if (!response.ok || !data.file?.text) {
+        setFileError(data.error ?? "Markdown file was not found.");
+        return;
+      }
+
+      loadMarkdownText(data.file.name, data.file.text);
+    } catch {
+      setFileError("Path loading is available in the desktop app.");
+    }
+  }
+
   function loadMarkdownText(name, text) {
     const extracted = extractMermaidBlocks(text);
     setFileName(name);
     setBlocks(extracted);
     setSelectedBlockId(extracted[0]?.id ?? "");
+    setFileError("");
     setActiveTab("files");
   }
 
@@ -125,8 +152,10 @@ function App() {
         ? h(FilesTab, {
           blocks,
           fileName,
+          fileError,
           selectedBlockId,
           onFileChange: handleFileChange,
+          onLoadPath: handleLoadPath,
           onSelectBlock: setSelectedBlockId,
         })
         : h(WriteTab, {
@@ -283,9 +312,17 @@ function TabButton({ active, onClick, children }) {
 }
 
 function FilesTab(
-  { blocks, fileName, selectedBlockId, onFileChange, onSelectBlock },
+  {
+    blocks,
+    fileName,
+    fileError,
+    selectedBlockId,
+    onFileChange,
+    onLoadPath,
+    onSelectBlock,
+  },
 ) {
-  const fileInputRef = useRef(null);
+  const [path, setPath] = useState(".");
 
   async function handleDrop(event) {
     event.preventDefault();
@@ -306,24 +343,32 @@ function FilesTab(
     h(
       "div",
       { className: "file-picker-row" },
+      h("input", {
+        className: "path-input",
+        type: "text",
+        value: path,
+        placeholder: "./SAMPLE.md or .",
+        onInput: (event) => setPath(event.currentTarget.value),
+        onKeyDown: (event) => {
+          if (event.key === "Enter") onLoadPath(path);
+        },
+        "aria-label": "Markdown file or directory path",
+      }),
       h(
         "button",
         {
           type: "button",
-          className: "file-picker",
-          onClick: () => fileInputRef.current?.click(),
+          className: "path-load-button",
+          onClick: () => onLoadPath(path),
         },
-        "Choose Markdown",
+        "Load",
       ),
-      h("input", {
-        ref: fileInputRef,
-        className: "file-input",
-        type: "file",
-        accept: ".md,.markdown,text/markdown,text/plain",
-        onChange: onFileChange,
-      }),
     ),
-    h("p", { className: "drop-hint" }, "or drop a Markdown file here"),
+    h(
+      "p",
+      { className: fileError ? "path-message is-error" : "path-message" },
+      fileError || "Enter a Markdown path, or drop a Markdown file here.",
+    ),
     h(
       "div",
       { className: "file-meta" },

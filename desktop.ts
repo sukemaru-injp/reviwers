@@ -37,6 +37,10 @@ Deno.serve(async (req) => {
     return await initialFileResponse();
   }
 
+  if (url.pathname === "/api/read-markdown") {
+    return await readMarkdownResponse(url.searchParams.get("path"));
+  }
+
   const pathname = decodeURIComponent(url.pathname);
   const filePath = pathname === "/" ? "index.html" : pathname.slice(1);
 
@@ -82,11 +86,29 @@ async function initialFileResponse(): Promise<Response> {
     return Response.json({ file: null });
   }
 
+  return await markdownFileResponse(initialPath);
+}
+
+async function readMarkdownResponse(path: string | null): Promise<Response> {
+  if (!path?.trim()) {
+    return Response.json(
+      { file: null, error: "Path is required." },
+      { status: 400 },
+    );
+  }
+
+  return await markdownFileResponse(new URL(path, cwdUrl()));
+}
+
+async function markdownFileResponse(pathUrl: URL): Promise<Response> {
   try {
-    const fileUrl = await resolveMarkdownFile(initialPath);
+    const fileUrl = await resolveMarkdownFile(pathUrl);
 
     if (!fileUrl) {
-      return Response.json({ file: null });
+      return Response.json(
+        { file: null, error: "Markdown file was not found." },
+        { status: 404 },
+      );
     }
 
     const text = await Deno.readTextFile(fileUrl);
