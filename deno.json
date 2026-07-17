@@ -1,0 +1,20 @@
+{
+  "nodeModulesDir": "auto",
+  "tasks": {
+    "dev": "vite --host 0.0.0.0 --port 8000",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 8000",
+    "desktop": "deno task build && deno desktop --allow-read --include=./dist --output ./build/MermaidReviewer.app desktop.ts",
+    "desktop:hmr": "deno desktop --hmr .",
+    "install:cli": "deno install --global --name reviwers --allow-run=deno,open --allow-read cli.ts"
+  },
+  "imports": {
+    "@deno/vite-plugin": "npm:@deno/vite-plugin@2.0.2",
+    "@std/assert": "jsr:@std/assert@1.0.13",
+    "lucide-preact": "npm:lucide-preact@1.24.0",
+    "mermaid": "npm:mermaid@11.16.0",
+    "preact": "npm:preact@10.29.2",
+    "preact/hooks": "npm:preact@10.29.2/hooks",
+    "vite": "npm:vite@8.1.4"
+  }
+}
