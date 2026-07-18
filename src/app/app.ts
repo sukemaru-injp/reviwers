@@ -1,5 +1,18 @@
 import { h, render } from "preact";
+import type {
+  ComponentChildren,
+  TargetedDragEvent,
+  TargetedEvent,
+  TargetedInputEvent,
+  TargetedPointerEvent,
+  TargetedWheelEvent,
+} from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import {
+  extractMermaidBlocks,
+  type MermaidBlock,
+} from "../domain/mermaidBlocks.ts";
+import type { FileSummary } from "../domain/settings.ts";
 import {
   ArrowLeft,
   Check,
@@ -13,7 +26,26 @@ import mermaid from "mermaid";
 
 const sampleMermaid =
   "flowchart TD\n  A[Markdown file] --> B{Mermaid blocks?}\n  B -->|Files tab| C[Select diagram]\n  B -->|Write tab| D[Live edit]\n  C --> E[Preview]\n  D --> E\n";
-const colorSchemes = [
+type ColorSchemeId = "graphite" | "citrus" | "lagoon" | "rose";
+type SettingsView = "main" | "color";
+
+interface ColorScheme {
+  id: ColorSchemeId;
+  name: string;
+  swatch: string;
+  mermaidTheme: "default" | "base";
+}
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+interface Transform extends Point {
+  scale: number;
+}
+
+const colorSchemes: readonly ColorScheme[] = [
   {
     id: "graphite",
     name: "Graphite",
@@ -34,15 +66,14 @@ mermaid.initialize({
 function App() {
   const [activeTab, setActiveTab] = useState("write");
   const [fileName, setFileName] = useState("");
-  const [blocks, setBlocks] = useState([]);
+  const [blocks, setBlocks] = useState<MermaidBlock[]>([]);
   const [selectedBlockId, setSelectedBlockId] = useState("");
   const [writeSource, setWriteSource] = useState(sampleMermaid);
   const [colorScheme, setColorScheme] = useState(colorSchemes[0].id);
-  const [recentFiles, setRecentFiles] = useState([]);
+  const [recentFiles, setRecentFiles] = useState<FileSummary[]>([]);
   const [fileError, setFileError] = useState("");
   const [isChoosingFile, setIsChoosingFile] = useState(false);
   const [desktopApiAvailable, setDesktopApiAvailable] = useState(false);
-  const settingsLoadedRef = useRef(false);
   const selectedBlock = blocks.find((block) => block.id === selectedBlockId) ??
     null;
   const selectedScheme =
@@ -74,8 +105,6 @@ function App() {
         // The Vite dev server does not provide desktop settings.
       }
 
-      settingsLoadedRef.current = true;
-
       try {
         const fileResponse = await fetch("/api/initial-file");
         if (!fileResponse.ok) return;
@@ -96,19 +125,22 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!settingsLoadedRef.current) return;
+  function handleColorSchemeSelect(schemeId: ColorSchemeId) {
+    setColorScheme(schemeId);
+    void saveSettings({ colorScheme: schemeId });
+  }
 
-    saveSettings({ colorScheme });
-  }, [colorScheme]);
+  async function handleFile(file: File) {
+    const text = await file.text();
+    loadMarkdownText(file.name, text);
+  }
 
-  async function handleFileChange(event) {
+  async function handleFileChange(event: TargetedEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
 
     if (!file) return;
 
-    const text = await file.text();
-    loadMarkdownText(file.name, text);
+    await handleFile(file);
   }
 
   async function chooseFile() {
@@ -133,7 +165,7 @@ function App() {
     }
   }
 
-  async function openRecentFile(path) {
+  async function openRecentFile(path: string) {
     setFileError("");
 
     try {
@@ -153,7 +185,7 @@ function App() {
     }
   }
 
-  async function deleteRecentFile(path) {
+  async function deleteRecentFile(path: string) {
     setFileError("");
 
     try {
@@ -174,7 +206,7 @@ function App() {
     }
   }
 
-  function loadMarkdownText(name, text) {
+  function loadMarkdownText(name: string, text: string) {
     const extracted = extractMermaidBlocks(text);
     setFileName(name);
     setBlocks(extracted);
@@ -200,7 +232,7 @@ function App() {
         h(SettingsMenu, {
           schemes: colorSchemes,
           selectedScheme,
-          onSelect: setColorScheme,
+          onSelect: handleColorSchemeSelect,
         }),
       ),
       h(
@@ -225,6 +257,7 @@ function App() {
           isChoosingFile,
           desktopApiAvailable,
           onChooseFile: chooseFile,
+          onFile: handleFile,
           onFileChange: handleFileChange,
           onOpenRecentFile: openRecentFile,
           onDeleteRecentFile: deleteRecentFile,
@@ -244,7 +277,7 @@ function App() {
   );
 }
 
-async function saveSettings(settings) {
+async function saveSettings(settings: { colorScheme: ColorSchemeId }) {
   try {
     await fetch("/api/settings", {
       method: "PUT",
@@ -256,27 +289,41 @@ async function saveSettings(settings) {
   }
 }
 
-function isKnownColorScheme(value) {
+function isKnownColorScheme(value: unknown): value is ColorSchemeId {
   return colorSchemes.some((scheme) => scheme.id === value);
 }
 
-function markFileAsRecent(files, path) {
+function markFileAsRecent(
+  files: FileSummary[],
+  path: string,
+): FileSummary[] {
   return [
     { path, lastUsedAt: new Date().toISOString() },
     ...files.filter((file) => file.path !== path),
   ];
 }
 
-function SettingsMenu({ schemes, selectedScheme, onSelect }) {
+interface SettingsMenuProps {
+  schemes: readonly ColorScheme[];
+  selectedScheme: ColorScheme;
+  onSelect: (schemeId: ColorSchemeId) => void;
+}
+
+function SettingsMenu(
+  { schemes, selectedScheme, onSelect }: SettingsMenuProps,
+) {
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState("main");
-  const menuRef = useRef(null);
+  const [view, setView] = useState<SettingsView>("main");
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
 
-    function handlePointerDown(event) {
-      if (!menuRef.current?.contains(event.target)) {
+    function handlePointerDown(event: PointerEvent) {
+      if (
+        !(event.target instanceof Node) ||
+        !menuRef.current?.contains(event.target)
+      ) {
         setOpen(false);
       }
     }
@@ -288,7 +335,7 @@ function SettingsMenu({ schemes, selectedScheme, onSelect }) {
     };
   }, [open]);
 
-  function chooseScheme(scheme) {
+  function chooseScheme(scheme: ColorScheme) {
     onSelect(scheme.id);
   }
 
@@ -326,8 +373,17 @@ function SettingsMenu({ schemes, selectedScheme, onSelect }) {
   );
 }
 
+interface SettingsPopoverProps {
+  view: SettingsView;
+  setView: (view: SettingsView) => void;
+  schemes: readonly ColorScheme[];
+  selectedScheme: ColorScheme;
+  chooseScheme: (scheme: ColorScheme) => void;
+}
+
 function SettingsPopover(
-  { view, setView, schemes, selectedScheme, chooseScheme },
+  { view, setView, schemes, selectedScheme, chooseScheme }:
+    SettingsPopoverProps,
 ) {
   if (view === "color") {
     return h(
@@ -398,12 +454,36 @@ function SettingsPopover(
   );
 }
 
-function TabButton({ active, onClick, children }) {
+interface TabButtonProps {
+  active: boolean;
+  onClick: () => void;
+  children?: ComponentChildren;
+}
+
+function TabButton({ active, onClick, children }: TabButtonProps) {
   return h("button", {
     className: active ? "tab is-active" : "tab",
     type: "button",
     onClick,
   }, children);
+}
+
+interface FilesTabProps {
+  blocks: MermaidBlock[];
+  fileName: string;
+  selectedBlockId: string;
+  recentFiles: FileSummary[];
+  fileError: string;
+  isChoosingFile: boolean;
+  desktopApiAvailable: boolean;
+  onChooseFile: () => void | Promise<void>;
+  onFile: (file: File) => void | Promise<void>;
+  onFileChange: (
+    event: TargetedEvent<HTMLInputElement>,
+  ) => void | Promise<void>;
+  onOpenRecentFile: (path: string) => void | Promise<void>;
+  onDeleteRecentFile: (path: string) => void | Promise<void>;
+  onSelectBlock: (blockId: string) => void;
 }
 
 function FilesTab(
@@ -416,21 +496,22 @@ function FilesTab(
     isChoosingFile,
     desktopApiAvailable,
     onChooseFile,
+    onFile,
     onFileChange,
     onOpenRecentFile,
     onDeleteRecentFile,
     onSelectBlock,
-  },
+  }: FilesTabProps,
 ) {
-  const fileInputRef = useRef(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  async function handleDrop(event) {
+  async function handleDrop(event: TargetedDragEvent<HTMLElement>) {
     event.preventDefault();
     const file = event.dataTransfer?.files?.[0];
 
     if (!file) return;
 
-    await onFileChange({ currentTarget: { files: [file] } });
+    await onFile(file);
   }
 
   return h(
@@ -543,11 +624,16 @@ function FilesTab(
   );
 }
 
-function fileNameFromPath(path) {
+function fileNameFromPath(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).at(-1) || path;
 }
 
-function WriteTab({ source, onChange }) {
+interface WriteTabProps {
+  source: string;
+  onChange: (source: string) => void;
+}
+
+function WriteTab({ source, onChange }: WriteTabProps) {
   return h(
     "section",
     { className: "tab-panel editor-panel" },
@@ -555,13 +641,14 @@ function WriteTab({ source, onChange }) {
       className: "mermaid-editor",
       spellCheck: "false",
       value: source,
-      onInput: (event) => onChange(event.currentTarget.value),
+      onInput: (event: TargetedInputEvent<HTMLTextAreaElement>) =>
+        onChange(event.currentTarget.value),
       "aria-label": "Mermaid source",
     }),
   );
 }
 
-function PreviewToolbar({ title }) {
+function PreviewToolbar({ title }: { title: string }) {
   return h(
     "header",
     { className: "preview-toolbar" },
@@ -574,14 +661,19 @@ function PreviewToolbar({ title }) {
   );
 }
 
-function MermaidPreview({ source, scheme }) {
+interface MermaidPreviewProps {
+  source: string;
+  scheme: ColorScheme;
+}
+
+function MermaidPreview({ source, scheme }: MermaidPreviewProps) {
   const [svg, setSvg] = useState("");
   const [error, setError] = useState("");
   const previewId = useMemo(() => "diagram-" + crypto.randomUUID(), [source]);
-  const viewportRef = useRef(null);
-  const contentRef = useRef(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const panStateRef = useRef({ dragging: false, x: 0, y: 0, left: 0, top: 0 });
-  const pointerMapRef = useRef(new Map());
+  const pointerMapRef = useRef(new Map<number, Point>());
   const pinchStateRef = useRef({ distance: 0, scale: 1 });
   const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
 
@@ -607,7 +699,11 @@ function MermaidPreview({ source, scheme }) {
         if (!cancelled) setSvg(result.svg);
       } catch (renderError) {
         if (!cancelled) {
-          setError(renderError?.message ?? String(renderError));
+          setError(
+            renderError instanceof Error
+              ? renderError.message
+              : String(renderError),
+          );
         }
       }
     }
@@ -619,7 +715,7 @@ function MermaidPreview({ source, scheme }) {
     };
   }, [previewId, scheme, source]);
 
-  function updateTransform(next) {
+  function updateTransform(next: Partial<Transform>) {
     setTransform((current) => ({
       scale: clamp(next.scale ?? current.scale, 0.25, 4),
       x: next.x ?? current.x,
@@ -627,7 +723,7 @@ function MermaidPreview({ source, scheme }) {
     }));
   }
 
-  function handleWheel(event) {
+  function handleWheel(event: TargetedWheelEvent<HTMLDivElement>) {
     if (!svg) return;
     event.preventDefault();
     const direction = event.deltaY > 0 ? -1 : 1;
@@ -635,7 +731,7 @@ function MermaidPreview({ source, scheme }) {
     updateTransform({ scale });
   }
 
-  function handlePointerDown(event) {
+  function handlePointerDown(event: TargetedPointerEvent<HTMLDivElement>) {
     if (!svg) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     pointerMapRef.current.set(event.pointerId, {
@@ -661,7 +757,7 @@ function MermaidPreview({ source, scheme }) {
     };
   }
 
-  function handlePointerMove(event) {
+  function handlePointerMove(event: TargetedPointerEvent<HTMLDivElement>) {
     if (pointerMapRef.current.has(event.pointerId)) {
       pointerMapRef.current.set(event.pointerId, {
         x: event.clientX,
@@ -690,10 +786,8 @@ function MermaidPreview({ source, scheme }) {
     });
   }
 
-  function stopDragging(event) {
-    if (event?.pointerId !== undefined) {
-      pointerMapRef.current.delete(event.pointerId);
-    }
+  function stopDragging(event: TargetedPointerEvent<HTMLDivElement>) {
+    pointerMapRef.current.delete(event.pointerId);
 
     panStateRef.current.dragging = false;
 
@@ -762,77 +856,16 @@ function MermaidPreview({ source, scheme }) {
   );
 }
 
-function extractMermaidBlocks(markdown) {
-  const blocks = [];
-  const lines = markdown.split(/\r?\n/);
-  let inFence = false;
-  let fenceChar = "";
-  let fenceLength = 0;
-  let fenceStartLine = 0;
-  let isMermaidFence = false;
-  let buffer = [];
-
-  lines.forEach((line, lineIndex) => {
-    const opening = line.match(/^(\s*)(`{3,}|~{3,})(.*)$/);
-
-    if (!inFence && opening) {
-      const marker = opening[2];
-      const info = opening[3].trim().toLowerCase();
-      inFence = true;
-      fenceChar = marker[0];
-      fenceLength = marker.length;
-      fenceStartLine = lineIndex + 1;
-      isMermaidFence = info.split(/\s+/)[0] === "mermaid";
-      buffer = [];
-      return;
-    }
-
-    if (inFence) {
-      const closingPattern = new RegExp(
-        "^\\s*" + escapeRegExp(fenceChar) + "{" + fenceLength + ",}\\s*$",
-      );
-
-      if (closingPattern.test(line)) {
-        if (isMermaidFence) {
-          const index = blocks.length;
-          blocks.push({
-            id: "mermaid-" + (index + 1),
-            title: "Diagram " + (index + 1) + " · line " + fenceStartLine,
-            index,
-            startLine: fenceStartLine,
-            source: buffer.join("\n").trim(),
-          });
-        }
-
-        inFence = false;
-        fenceChar = "";
-        fenceLength = 0;
-        isMermaidFence = false;
-        buffer = [];
-        return;
-      }
-
-      if (isMermaidFence) buffer.push(line);
-    }
-  });
-
-  return blocks;
-}
-
-function firstMeaningfulLine(source) {
+function firstMeaningfulLine(source: string): string {
   return source.split(/\r?\n/).find((line) => line.trim())?.trim() ??
     "Empty block";
 }
 
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function clamp(value, min, max) {
+function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-function pointerDistance(pointerMap) {
+function pointerDistance(pointerMap: Map<number, Point>): number {
   const pointers = Array.from(pointerMap.values());
   if (pointers.length < 2) return 0;
 
@@ -840,8 +873,8 @@ function pointerDistance(pointerMap) {
   return Math.hypot(second.x - first.x, second.y - first.y);
 }
 
-function mermaidThemeVariables(schemeId) {
-  const variables = {
+function mermaidThemeVariables(schemeId: ColorSchemeId) {
+  const variables: Record<ColorSchemeId, Record<string, string>> = {
     graphite: {
       primaryColor: "#eef5ff",
       primaryBorderColor: "#1f6feb",
@@ -871,4 +904,6 @@ function mermaidThemeVariables(schemeId) {
   return variables[schemeId] ?? variables.graphite;
 }
 
-render(h(App), document.getElementById("app"));
+const root = document.getElementById("app");
+if (!root) throw new Error("App root element was not found.");
+render(h(App, null), root);
