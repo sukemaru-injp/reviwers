@@ -4,8 +4,10 @@ import {
   ArrowLeft,
   Check,
   ChevronRight,
+  FileText,
   Palette,
   Settings,
+  Trash2,
 } from "lucide-preact";
 import mermaid from "mermaid";
 
@@ -36,6 +38,10 @@ function App() {
   const [selectedBlockId, setSelectedBlockId] = useState("");
   const [writeSource, setWriteSource] = useState(sampleMermaid);
   const [colorScheme, setColorScheme] = useState(colorSchemes[0].id);
+  const [recentFiles, setRecentFiles] = useState([]);
+  const [fileError, setFileError] = useState("");
+  const [isChoosingFile, setIsChoosingFile] = useState(false);
+  const [desktopApiAvailable, setDesktopApiAvailable] = useState(false);
   const settingsLoadedRef = useRef(false);
   const selectedBlock = blocks.find((block) => block.id === selectedBlockId) ??
     null;
@@ -56,8 +62,12 @@ function App() {
         const settingsResponse = await fetch("/api/settings");
         if (settingsResponse.ok) {
           const data = await settingsResponse.json();
+          if (!cancelled) setDesktopApiAvailable(true);
           if (!cancelled && isKnownColorScheme(data.settings?.colorScheme)) {
             setColorScheme(data.settings.colorScheme);
+          }
+          if (!cancelled && Array.isArray(data.settings?.summary)) {
+            setRecentFiles(data.settings.summary);
           }
         }
       } catch {
@@ -99,6 +109,69 @@ function App() {
 
     const text = await file.text();
     loadMarkdownText(file.name, text);
+  }
+
+  async function chooseFile() {
+    setFileError("");
+    setIsChoosingFile(true);
+
+    try {
+      const response = await fetch("/api/choose-markdown", { method: "POST" });
+      const data = await response.json();
+
+      if (data.cancelled) return;
+      if (!response.ok || !data.file?.text) {
+        throw new Error(data.error || "Could not open the selected file.");
+      }
+
+      loadMarkdownText(data.file.name, data.file.text);
+      setRecentFiles((current) => markFileAsRecent(current, data.file.path));
+    } catch (error) {
+      setFileError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsChoosingFile(false);
+    }
+  }
+
+  async function openRecentFile(path) {
+    setFileError("");
+
+    try {
+      const response = await fetch(
+        "/api/read-markdown?path=" + encodeURIComponent(path),
+      );
+      const data = await response.json();
+
+      if (!response.ok || !data.file?.text) {
+        throw new Error(data.error || "Could not open this file.");
+      }
+
+      loadMarkdownText(data.file.name, data.file.text);
+      setRecentFiles((current) => markFileAsRecent(current, data.file.path));
+    } catch (error) {
+      setFileError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function deleteRecentFile(path) {
+    setFileError("");
+
+    try {
+      const response = await fetch("/api/recent-files", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ path }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Could not remove this file.");
+      }
+
+      setRecentFiles(data.settings?.summary ?? []);
+    } catch (error) {
+      setFileError(error instanceof Error ? error.message : String(error));
+    }
   }
 
   function loadMarkdownText(name, text) {
@@ -147,7 +220,14 @@ function App() {
           blocks,
           fileName,
           selectedBlockId,
+          recentFiles,
+          fileError,
+          isChoosingFile,
+          desktopApiAvailable,
+          onChooseFile: chooseFile,
           onFileChange: handleFileChange,
+          onOpenRecentFile: openRecentFile,
+          onDeleteRecentFile: deleteRecentFile,
           onSelectBlock: setSelectedBlockId,
         })
         : h(WriteTab, {
@@ -178,6 +258,13 @@ async function saveSettings(settings) {
 
 function isKnownColorScheme(value) {
   return colorSchemes.some((scheme) => scheme.id === value);
+}
+
+function markFileAsRecent(files, path) {
+  return [
+    { path, lastUsedAt: new Date().toISOString() },
+    ...files.filter((file) => file.path !== path),
+  ];
 }
 
 function SettingsMenu({ schemes, selectedScheme, onSelect }) {
@@ -324,10 +411,19 @@ function FilesTab(
     blocks,
     fileName,
     selectedBlockId,
+    recentFiles,
+    fileError,
+    isChoosingFile,
+    desktopApiAvailable,
+    onChooseFile,
     onFileChange,
+    onOpenRecentFile,
+    onDeleteRecentFile,
     onSelectBlock,
   },
 ) {
+  const fileInputRef = useRef(null);
+
   async function handleDrop(event) {
     event.preventDefault();
     const file = event.dataTransfer?.files?.[0];
@@ -348,23 +444,70 @@ function FilesTab(
       "div",
       { className: "file-picker-row" },
       h(
-        "label",
-        { className: "browse-button" },
-        h("span", null, "Choose File"),
-        h("input", {
-          className: "browse-input",
-          type: "file",
-          accept: ".md,.markdown,text/markdown,text/plain",
-          onChange: onFileChange,
-          "aria-label": "Browse Markdown",
-        }),
+        "button",
+        {
+          type: "button",
+          className: "browse-button",
+          onClick: desktopApiAvailable
+            ? onChooseFile
+            : () => fileInputRef.current?.click(),
+          disabled: isChoosingFile,
+        },
+        isChoosingFile ? "Choosing…" : "Choose File",
       ),
+      h("input", {
+        ref: fileInputRef,
+        className: "browse-input",
+        type: "file",
+        accept: ".md,.markdown,text/markdown,text/plain",
+        onChange: onFileChange,
+        "aria-label": "Browse Markdown",
+      }),
     ),
     h(
       "p",
-      { className: "path-message" },
-      "Choose a Markdown file, or drop one here.",
+      { className: fileError ? "path-message is-error" : "path-message" },
+      fileError || "Choose a Markdown file, or drop one here.",
     ),
+    recentFiles.length > 0
+      ? h(
+        "div",
+        { className: "recent-file-list", role: "list" },
+        recentFiles.map((file) =>
+          h(
+            "div",
+            { className: "recent-file-item", role: "listitem", key: file.path },
+            h(
+              "button",
+              {
+                type: "button",
+                className: "recent-file-open",
+                onClick: () => onOpenRecentFile(file.path),
+                title: file.path,
+              },
+              h(FileText, { size: 16, "aria-hidden": "true" }),
+              h(
+                "span",
+                { className: "recent-file-copy" },
+                h("span", null, fileNameFromPath(file.path)),
+                h("small", null, file.path),
+              ),
+            ),
+            h(
+              "button",
+              {
+                type: "button",
+                className: "recent-file-delete",
+                onClick: () => onDeleteRecentFile(file.path),
+                "aria-label": "Remove " + fileNameFromPath(file.path),
+                title: "Remove from recent files",
+              },
+              h(Trash2, { size: 15, "aria-hidden": "true" }),
+            ),
+          )
+        ),
+      )
+      : null,
     h(
       "div",
       { className: "file-meta" },
@@ -398,6 +541,10 @@ function FilesTab(
           : "Select a Markdown file to extract Mermaid blocks.",
       ),
   );
+}
+
+function fileNameFromPath(path) {
+  return path.split(/[\\/]/).filter(Boolean).at(-1) || path;
 }
 
 function WriteTab({ source, onChange }) {

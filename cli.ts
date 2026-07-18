@@ -21,6 +21,7 @@ await run([
   "desktop",
   "--allow-read",
   "--allow-write",
+  "--allow-run=osascript",
   "--allow-env=HOME",
   "--include=./dist",
   `--output=${appOutput}`,

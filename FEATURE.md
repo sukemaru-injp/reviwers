@@ -15,6 +15,8 @@ Mermaid Reviewer は、Markdown に埋め込まれた Mermaid 図や直接入力
 
 - Markdown ファイルを選択できる
 - 選択された `.md` ファイルを読み込む
+- 一度選択したファイルをボタン下部の履歴一覧から再度開ける
+- 履歴一覧から不要なファイルを削除できる
 - ファイル内の Mermaid コードブロックを抽出する
 - 複数の Mermaid ブロックがある場合、一覧から選択して切り替えられる
 - Mermaid ブロックがない場合は、その状態を明示する
@@ -90,16 +92,25 @@ graph TD
 デスクトップアプリでは、設定をローカルファイルに保存します。
 
 - 保存先: `~/.reviewers/settings.json`
-- 初期保存項目: `colorScheme`
+- 保存項目: `colorScheme`、`summary`
 - 起動時に設定を読み込み、UIへ反映する
 - 設定ファイルが存在しない、または壊れている場合はデフォルト設定にフォールバックする
+- `summary` は最近使った Markdown ファイルを最新順で保持する
+- 同じパスを再度開いた場合は重複させず、`lastUsedAt` を更新する
+- 履歴は最大5件とする
 - 将来の設定項目は同じJSONへフィールドを追加する
 
 例:
 
 ```json
 {
-  "colorScheme": "graphite"
+  "colorScheme": "graphite",
+  "summary": [
+    {
+      "path": "/Users/example/docs/spec.md",
+      "lastUsedAt": "2026-07-18T01:23:45.000Z"
+    }
+  ]
 }
 ```
 

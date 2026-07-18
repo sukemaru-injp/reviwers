@@ -336,11 +336,10 @@ button {
 }
 
 .browse-button {
-  position: relative;
   display: inline-grid;
+  width: 100%;
   height: 40px;
   place-items: center;
-  overflow: hidden;
   border: 1px solid var(--accent);
   border-radius: 8px;
   background: var(--accent);
@@ -348,18 +347,18 @@ button {
   font-weight: 650;
 }
 
-.browse-button:hover,
-.browse-button:focus-within {
-  filter: brightness(0.96);
+.browse-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .browse-input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
+  display: none;
+}
+
+.browse-button:hover,
+.browse-button:focus-within {
+  filter: brightness(0.96);
 }
 
 .path-message {
@@ -367,6 +366,80 @@ button {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.4;
+}
+
+.recent-file-list {
+  display: grid;
+  gap: 6px;
+  max-height: 190px;
+  margin-top: 10px;
+  overflow: auto;
+}
+
+.recent-file-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  align-items: stretch;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.recent-file-open {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 6px 8px 10px;
+  color: var(--text);
+  text-align: left;
+}
+
+.recent-file-open:hover,
+.recent-file-open:focus-visible {
+  background: var(--selected-bg);
+}
+
+.recent-file-open svg {
+  margin-top: 2px;
+  color: var(--accent);
+}
+
+.recent-file-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.recent-file-copy span,
+.recent-file-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-file-copy span {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.recent-file-copy small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.recent-file-delete {
+  display: grid;
+  width: 34px;
+  border-left: 1px solid var(--border-soft);
+  color: var(--muted);
+  place-items: center;
+}
+
+.recent-file-delete:hover,
+.recent-file-delete:focus-visible {
+  background: var(--danger-bg);
+  color: var(--danger-text);
 }
 
 .path-message.is-error {

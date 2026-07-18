@@ -134,12 +134,20 @@ Current settings:
 
 ```json
 {
-  "colorScheme": "graphite"
+  "colorScheme": "graphite",
+  "summary": [
+    {
+      "path": "/Users/example/docs/spec.md",
+      "lastUsedAt": "2026-07-18T01:23:45.000Z"
+    }
+  ]
 }
 ```
 
 Changing the color schema automatically saves the setting and restores it on the
-next launch. Desktop launch tasks include `--allow-write` and `--allow-env=HOME`
+next launch. Markdown files selected in the desktop app are listed below the
+file button for quick reopening and can be removed from the list. Desktop launch
+tasks include `--allow-write`, `--allow-run=osascript`, and `--allow-env=HOME`
 for this.
 
 ## Dependencies

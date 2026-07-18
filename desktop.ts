@@ -1,10 +1,16 @@
+import {
+  type AppSettings,
+  DEFAULT_SETTINGS,
+  normalizeSettings,
+  recordRecentFile,
+  removeRecentFile,
+} from "./src/domain/settings.ts";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
 const DIST_ROOT = new URL("./dist/", import.meta.url);
 const initialPath = Deno.args[0] ? new URL(Deno.args[0], cwdUrl()) : null;
 const SETTINGS_DIR = new URL(".reviewers/", homeUrl());
 const SETTINGS_FILE = new URL("settings.json", SETTINGS_DIR);
-const DEFAULT_SETTINGS: AppSettings = {
-  colorScheme: "graphite",
-};
 const desktopDeno = Deno as typeof Deno & {
   BrowserWindow?: new (options: {
     title?: string;
@@ -50,6 +56,14 @@ Deno.serve(async (req) => {
     return await readMarkdownResponse(url.searchParams.get("path"));
   }
 
+  if (url.pathname === "/api/choose-markdown") {
+    return await chooseMarkdownResponse(req);
+  }
+
+  if (url.pathname === "/api/recent-files") {
+    return await recentFilesResponse(req);
+  }
+
   const pathname = decodeURIComponent(url.pathname);
   const filePath = pathname === "/" ? "index.html" : pathname.slice(1);
 
@@ -90,10 +104,6 @@ function contentType(filePath: string): string {
   return CONTENT_TYPES[extension] ?? "application/octet-stream";
 }
 
-interface AppSettings {
-  colorScheme: string;
-}
-
 async function settingsResponse(req: Request): Promise<Response> {
   if (req.method === "GET") {
     return Response.json({ settings: await readSettings() });
@@ -102,7 +112,10 @@ async function settingsResponse(req: Request): Promise<Response> {
   if (req.method === "PUT") {
     try {
       const body = await req.json();
-      const settings = normalizeSettings(body);
+      const settings = normalizeSettings({
+        ...await readSettings(),
+        ...(body && typeof body === "object" ? body : {}),
+      });
       await writeSettings(settings);
       return Response.json({ settings });
     } catch (error) {
@@ -143,18 +156,6 @@ async function writeSettings(settings: AppSettings): Promise<void> {
   );
 }
 
-function normalizeSettings(value: unknown): AppSettings {
-  const settings = value && typeof value === "object"
-    ? value as Partial<AppSettings>
-    : {};
-
-  return {
-    colorScheme: typeof settings.colorScheme === "string"
-      ? settings.colorScheme
-      : DEFAULT_SETTINGS.colorScheme,
-  };
-}
-
 async function initialFileResponse(): Promise<Response> {
   if (!initialPath) {
     return Response.json({ file: null });
@@ -171,7 +172,86 @@ async function readMarkdownResponse(path: string | null): Promise<Response> {
     );
   }
 
-  return await markdownFileResponse(new URL(path, cwdUrl()));
+  const response = await markdownFileResponse(pathToFileURL(path));
+
+  if (response.status === 200) {
+    await rememberRecentFile(path);
+  }
+
+  return response;
+}
+
+async function chooseMarkdownResponse(req: Request): Promise<Response> {
+  if (req.method !== "POST") {
+    return new Response("Method not allowed", {
+      status: 405,
+      headers: { allow: "POST" },
+    });
+  }
+
+  if (Deno.build.os !== "darwin") {
+    return Response.json(
+      { file: null, error: "Native file selection is currently macOS-only." },
+      { status: 501 },
+    );
+  }
+
+  const command = new Deno.Command("osascript", {
+    args: [
+      "-e",
+      'POSIX path of (choose file with prompt "Choose a Markdown file" of type {"md", "markdown"})',
+    ],
+    stdout: "piped",
+    stderr: "piped",
+  });
+  const output = await command.output();
+
+  if (!output.success) {
+    const error = new TextDecoder().decode(output.stderr);
+    if (error.includes("(-128)")) {
+      return Response.json({ file: null, cancelled: true });
+    }
+
+    return Response.json(
+      { file: null, error: error.trim() || "File selection failed." },
+      { status: 500 },
+    );
+  }
+
+  const path = new TextDecoder().decode(output.stdout).trim();
+  const response = await markdownFileResponse(pathToFileURL(path));
+
+  if (response.status === 200) {
+    await rememberRecentFile(path);
+  }
+
+  return response;
+}
+
+async function recentFilesResponse(req: Request): Promise<Response> {
+  if (req.method !== "DELETE") {
+    return new Response("Method not allowed", {
+      status: 405,
+      headers: { allow: "DELETE" },
+    });
+  }
+
+  try {
+    const body = await req.json();
+    const path = body && typeof body.path === "string" ? body.path : "";
+    const settings = removeRecentFile(await readSettings(), path);
+    await writeSettings(settings);
+    return Response.json({ settings });
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : String(error) },
+      { status: 400 },
+    );
+  }
+}
+
+async function rememberRecentFile(path: string): Promise<void> {
+  await writeSettings(recordRecentFile(await readSettings(), path));
 }
 
 async function markdownFileResponse(pathUrl: URL): Promise<Response> {
@@ -186,20 +266,22 @@ async function markdownFileResponse(pathUrl: URL): Promise<Response> {
     }
 
     const text = await Deno.readTextFile(fileUrl);
+    const filePath = fileURLToPath(fileUrl);
     return Response.json({
       file: {
-        name: fileUrl.pathname.split("/").at(-1) ?? "Untitled.md",
-        path: fileUrl.pathname,
+        name: filePath.split(/[\\/]/).at(-1) ?? "Untitled.md",
+        path: filePath,
         text,
       },
     });
   } catch (error) {
+    const status = error instanceof Deno.errors.NotFound ? 404 : 500;
     return Response.json(
       {
         file: null,
         error: error instanceof Error ? error.message : String(error),
       },
-      { status: 200 },
+      { status },
     );
   }
 }
