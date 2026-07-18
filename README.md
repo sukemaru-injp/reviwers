@@ -3,11 +3,7 @@
 A Deno Desktop Mermaid live viewer for previewing and reviewing diagrams from
 Markdown or direct input.
 
-## Screenshot
-
-Add a screenshot at `docs/images/screenshot.png` and it will appear here.
-
-![Mermaid Reviewer screenshot](./docs/images/screenshot.png)
+![Mermaid Reviewer screenshot](./docs/images/screenshot_1.png)
 
 ## Requirements
 
