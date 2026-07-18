@@ -1,18 +1,22 @@
 # Mermaid Reviewer
 
-Deno Desktop で構築する Mermaid 図レビュー用アプリケーションです。Markdown
-ファイルに含まれる Mermaid ブロックを抽出して図として確認したり、直接 Mermaid
-を書きながらライブプレビューできます。
+A Deno Desktop Mermaid live viewer for previewing and reviewing diagrams from
+Markdown or direct input.
+
+## Screenshot
+
+Add a screenshot at `docs/images/screenshot.png` and it will appear here.
+
+![Mermaid Reviewer screenshot](./docs/images/screenshot.png)
 
 ## Requirements
 
-- Deno v2.9.0 以上
-- `deno desktop` が利用できる環境
+- Deno v2.9.0 or later
+- A macOS environment that can run `deno desktop`
 
 ## Quick Start
 
-リポジトリを clone して、ルートで `deno task desktop`
-を実行すればデスクトップアプリとして使い始められます。
+Clone the repository and run the desktop task from the project root.
 
 ```sh
 git clone <repository-url>
@@ -20,97 +24,73 @@ cd reviwers
 deno task desktop
 ```
 
-初回起動時は、`deno.json` に固定された npm 依存を Deno が取得します。
-`deno task desktop` は build と Deno Desktop 起動をまとめた標準コマンドです。
-`deno desktop` を直接使う場合は、先に `deno task build` を実行し、entrypoint
-として `desktop.ts` を指定してください。
+On first run, Deno downloads the npm dependencies pinned in `deno.json`.
+
+`deno task desktop` is the standard launch command. It builds the Vite app, then
+runs Deno Desktop with `desktop.ts` as the explicit entrypoint.
+
+If you want to call `deno desktop` directly, build first and pass the entrypoint
+yourself:
 
 ```sh
 deno task build
 deno desktop --backend=cef --allow-read --allow-write --allow-env=HOME --include=./dist --output ./build/MermaidReviewerCEF.app desktop.ts
 ```
 
-CLIとして使いたい場合は、グローバルコマンド `reviwers` をインストールできます。
+## CLI
+
+You can install the `reviwers` command globally:
 
 ```sh
 deno task install:cli
 ```
 
-インストール後は任意のディレクトリから起動できます。
+Then launch the app from any directory:
 
 ```sh
 reviwers .
 reviwers ./SAMPLE.md
 ```
 
-引数には Markdown ファイル、または Markdown
-ファイルを含むディレクトリを指定できます。ディレクトリを指定した場合は、その中の最初の
-`.md` / `.markdown` ファイルを起動時に読み込みます。 macOSでは `reviwers` が
-`./build/MermaidReviewerCEF.app` を生成した後、`open` でアプリを起動します。
+The argument can be a Markdown file or a directory containing Markdown files. If
+a directory is provided, the app loads the first `.md` or `.markdown` file it
+finds. On macOS, the CLI builds `./build/MermaidReviewerCEF.app` and opens it
+with `open`.
 
-## 目的
+## Features
 
-- Markdown 内の複数 Mermaid ブロックを素早く切り替えて確認する
-- Mermaid を直接編集しながらレンダリング結果を確認する
-- 図をズーム、ピンチ、ドラッグ移動しながらレビューする
-- 将来的に右側へ LLM チャット領域を追加し、ローカル API Key
-  を使ったレビュー支援を行う
+- Extract Mermaid code blocks from Markdown files
+- Switch between multiple Mermaid diagrams in a file
+- Write Mermaid directly and preview it live
+- Zoom, pinch, pan, and reset the diagram view
+- Change the color schema from the settings menu
+- Persist settings in `~/.reviewers/settings.json`
+- Open Markdown from the CLI with `reviwers .` or `reviwers ./file.md`
 
-## 想定 UI
+## Layout
 
-画面は大きく左右 2 ペインで構成します。
+The app uses a two-pane layout.
 
-- 左ペイン: 画面幅の約 1/3
-  - `Files` タブ: Markdown ファイルを選択して、含まれる Mermaid
-    コードブロックを一覧化して切り替える
-  - `Files` タブ: Markdown ファイルのドラッグ&ドロップにも対応
-  - `Write` タブ: Mermaid を直接入力し、ライブプレビューする
-- 右ペイン: 画面幅の約 2/3
-  - 選択中または編集中の Mermaid を図として表示
-  - ズーム、ピンチ、パン操作に対応
-- タイトル右側
-  - カラースキーマを切り替える設定メニューを配置
+- Left pane
+  - `Files` tab: choose a Markdown file or drop one into the app
+  - `Write` tab: write Mermaid directly
+- Right pane
+  - Rendered Mermaid diagram
+  - Zoom and pan controls
+- Header settings menu
+  - Color schema selection
 
-将来拡張では、右側または補助ペインに LLM チャット領域を追加します。
+Future versions may add an LLM chat area for diagram review assistance.
 
-## 技術方針
+## Development
 
-現時点では、Deno の標準的な TypeScript 実行環境をベースにし、UI は Web
-技術で構築します。
-
-- Runtime: Deno
-- Desktop shell: Deno Desktop / WebView 系の構成を前提
-- UI: Preact + Vite
-- Mermaid rendering: `mermaid`
-- Pan / zoom: 初期実装は Pointer Events。複雑化したら軽量ライブラリを検討
-- Markdown parsing: `unified` +
-  `remark-parse`、またはコードフェンス抽出に特化した軽量実装
-- Local file access: Deno 側 API で Markdown を読み込み、フロントエンドへ渡す
-- LLM chat: 将来、ローカル設定の API Key を Deno 側で扱い、UI
-  側には秘匿値を直接露出しない
-
-UI ライブラリは、初期実装では大きなコンポーネントフレームワークを入れず、Preact
-と CSS Modules または素の CSS で進めます。必要に応じて `preact/compat` で React
-向けライブラリを利用します。レビュー用途のツールなので、装飾よりも密度、視認性、操作の速さを優先します。
-
-## 開発コマンド
-
-デスクトップアプリとして起動する場合:
+Launch the desktop app:
 
 ```sh
 deno task desktop
 ```
 
-`deno task desktop` は Vite の production build を作成してから、`desktop.ts` を
-entrypoint として Deno Desktop を起動します。Deno Desktop
-のフレームワーク自動検出は experimental なので、このプロジェクトでは明示的な
-entrypoint を標準ルートにしています。`deno desktop` 単体ではなく、
-`deno task desktop` を使ってください。 出力先は `./build/MermaidReviewer.app`
-に固定し、Deno Desktop のデフォルト出力名との衝突を避けます。
-CLIインストール時は、内部で `deno` と macOS の `open` コマンドを実行するため、
-`--allow-run=deno,open` を付与します。
-
-開発・検証では以下も利用できます。
+Development and verification commands:
 
 ```sh
 deno task dev
@@ -122,27 +102,34 @@ deno task install:cli
 deno test
 ```
 
-現在のUIは Vite で構築します。ルートの `index.html` と `vite.config.ts`
-で通常のVite開発を行い、Deno Desktop起動時は `desktop.ts` が `dist/`
-をローカルHTTPで配信します。`cli.ts` は `reviwers .`
-のようなコマンド起動用の薄いラッパーで、Vite build 後に `desktop.ts` を
-entrypoint として Deno Desktop を起動します。
-デスクトップ起動時の初期ウィンドウサイズは `1100x760` に設定しています。 Deno
-Desktop の標準WebViewでは file picker が動かないため、現時点では CEF backend
-を正式ルートにしています。WebView backendを切り分けたい場合は以下を使います。
+The UI is built with Vite. `index.html` and `vite.config.ts` are used for normal
+Vite development. For Deno Desktop, `desktop.ts` serves the built `dist/`
+directory over local HTTP.
+
+Deno Desktop's default WebView backend currently does not handle the file picker
+correctly for this app, so the official launch path uses the CEF backend:
+
+```sh
+deno task desktop
+```
+
+For backend comparison, WebView output is still available:
 
 ```sh
 deno task desktop:webview
 ```
 
-`desktop:webview` は `--backend=cef` を付けず、出力先を
-`./build/MermaidReviewer.app` に分けます。
+The desktop window starts at `1100x760`.
 
 ## Settings
 
-アプリ設定はローカルの `~/.reviewers/settings.json` に保存します。
+Settings are stored locally at:
 
-現在保存する項目:
+```text
+~/.reviewers/settings.json
+```
+
+Current settings:
 
 ```json
 {
@@ -150,16 +137,25 @@ deno task desktop:webview
 }
 ```
 
-カラースキーマを変更すると自動保存され、次回起動時に復元されます。設定保存のため、Desktop起動タスクには
-`--allow-write` と `--allow-env=HOME` を付与しています。
+Changing the color schema automatically saves the setting and restores it on the
+next launch. Desktop launch tasks include `--allow-write` and `--allow-env=HOME`
+for this.
 
-Preact、Mermaid、lucide-preact、Vite などの依存は `deno.json` の `imports`
-でバージョン固定します。`package.json` は Deno Desktop / Vite
-検出用の最小メタデータと npm
-互換スクリプトだけを持ち、依存バージョンは置きません。
+## Dependencies
 
-## ドキュメント
+Dependencies are pinned in `deno.json` imports. `package.json` only contains
+minimal metadata and npm-compatible scripts for Vite/Deno Desktop detection.
 
-- [FEATURE.md](./FEATURE.md): 仕様整理
-- [PLAN.md](./PLAN.md): 実装計画
-- [SAMPLE.md](./SAMPLE.md): 動作確認用 Mermaid サンプル
+Main dependencies:
+
+- Deno Desktop
+- Preact
+- Vite
+- Mermaid
+- lucide-preact
+
+## Documents
+
+- [FEATURE.md](./FEATURE.md): feature specification
+- [PLAN.md](./PLAN.md): implementation plan
+- [SAMPLE.md](./SAMPLE.md): sample Mermaid diagrams
