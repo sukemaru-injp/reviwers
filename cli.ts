@@ -15,10 +15,10 @@ The path can be a Markdown file or a directory containing Markdown files.`);
 
 const targetPath = await resolveTargetPath(Deno.args[0] ?? ".");
 
+await run(["task", "icon:macos"]);
 await run(["task", "build"]);
 await run([
   "desktop",
-  "--backend=cef",
   "--allow-read",
   "--allow-write",
   "--allow-env=HOME",

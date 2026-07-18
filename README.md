@@ -30,7 +30,7 @@ yourself:
 
 ```sh
 deno task build
-deno desktop --backend=cef --allow-read --allow-write --allow-env=HOME --include=./dist --output ./build/MermaidReviewerCEF.app desktop.ts
+deno desktop --allow-read --allow-write --allow-env=HOME --include=./dist --output ./build/MermaidReviewerCEF.app desktop.ts
 ```
 
 ## CLI
@@ -103,7 +103,8 @@ Vite development. For Deno Desktop, `desktop.ts` serves the built `dist/`
 directory over local HTTP.
 
 Deno Desktop's default WebView backend currently does not handle the file picker
-correctly for this app, so the official launch path uses the CEF backend:
+correctly for this app, so `deno.json` configures the official launch path to
+use the CEF backend:
 
 ```sh
 deno task desktop
@@ -116,6 +117,10 @@ deno task desktop:webview
 ```
 
 The desktop window starts at `1100x760`.
+
+The macOS app icon source is `assets/icon.png` and must be a 1024x1024 PNG.
+`deno task icon:macos` generates `assets/icon.icns`; the normal desktop and CLI
+launch flows run this step automatically.
 
 ## Settings
 

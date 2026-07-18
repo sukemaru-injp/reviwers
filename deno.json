@@ -1,11 +1,22 @@
 {
   "nodeModulesDir": "auto",
+  "desktop": {
+    "app": {
+      "name": "Mermaid Reviewer",
+      "identifier": "dev.ryosuke.mermaid-reviewer",
+      "icons": {
+        "macos": "./assets/icon.icns"
+      }
+    },
+    "backend": "cef"
+  },
   "tasks": {
     "dev": "vite --host 0.0.0.0 --port 8000",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0 --port 8000",
-    "desktop": "deno task build && deno desktop --backend=cef --allow-read --allow-write --allow-env=HOME --include=./dist --output ./build/MermaidReviewerCEF.app desktop.ts",
-    "desktop:webview": "deno task build && deno desktop --allow-read --allow-write --allow-env=HOME --include=./dist --output ./build/MermaidReviewer.app desktop.ts",
+    "icon:macos": "deno run --allow-read=./assets/icon.png --allow-write=./assets/icon.icns scripts/generate_macos_icon.ts",
+    "desktop": "deno task icon:macos && deno task build && deno desktop --allow-read --allow-write --allow-env=HOME --include=./dist --output ./build/MermaidReviewerCEF.app desktop.ts",
+    "desktop:webview": "deno task build && deno desktop --backend=webview --allow-read --allow-write --allow-env=HOME --include=./dist --output ./build/MermaidReviewer.app desktop.ts",
     "desktop:hmr": "deno desktop --hmr .",
     "install:cli": "deno install --global --name reviwers --allow-run=deno,open --allow-read --allow-write --allow-env=HOME cli.ts"
   },
