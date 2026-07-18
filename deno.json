@@ -4,9 +4,10 @@
     "dev": "vite --host 0.0.0.0 --port 8000",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0 --port 8000",
-    "desktop": "deno task build && deno desktop --allow-read --include=./dist --output ./build/MermaidReviewer.app desktop.ts",
+    "desktop": "deno task build && deno desktop --backend=cef --allow-read --allow-write --allow-env=HOME --include=./dist --output ./build/MermaidReviewerCEF.app desktop.ts",
+    "desktop:webview": "deno task build && deno desktop --allow-read --allow-write --allow-env=HOME --include=./dist --output ./build/MermaidReviewer.app desktop.ts",
     "desktop:hmr": "deno desktop --hmr .",
-    "install:cli": "deno install --global --name reviwers --allow-run=deno,open --allow-read cli.ts"
+    "install:cli": "deno install --global --name reviwers --allow-run=deno,open --allow-read --allow-write --allow-env=HOME cli.ts"
   },
   "imports": {
     "@deno/vite-plugin": "npm:@deno/vite-plugin@2.0.2",

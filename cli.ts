@@ -1,5 +1,5 @@
 const appRoot = new URL(".", import.meta.url);
-const appOutput = "./build/MermaidReviewer.app";
+const appOutput = "./build/MermaidReviewerCEF.app";
 
 if (Deno.args.includes("--help") || Deno.args.includes("-h")) {
   console.log(`Usage:
@@ -18,7 +18,10 @@ const targetPath = await resolveTargetPath(Deno.args[0] ?? ".");
 await run(["task", "build"]);
 await run([
   "desktop",
+  "--backend=cef",
   "--allow-read",
+  "--allow-write",
+  "--allow-env=HOME",
   "--include=./dist",
   `--output=${appOutput}`,
   "desktop.ts",

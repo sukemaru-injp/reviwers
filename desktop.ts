@@ -1,5 +1,10 @@
 const DIST_ROOT = new URL("./dist/", import.meta.url);
 const initialPath = Deno.args[0] ? new URL(Deno.args[0], cwdUrl()) : null;
+const SETTINGS_DIR = new URL(".reviewers/", homeUrl());
+const SETTINGS_FILE = new URL("settings.json", SETTINGS_DIR);
+const DEFAULT_SETTINGS: AppSettings = {
+  colorScheme: "graphite",
+};
 const desktopDeno = Deno as typeof Deno & {
   BrowserWindow?: new (options: {
     title?: string;
@@ -32,6 +37,10 @@ const CONTENT_TYPES: Record<string, string> = {
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
+
+  if (url.pathname === "/api/settings") {
+    return await settingsResponse(req);
+  }
 
   if (url.pathname === "/api/initial-file") {
     return await initialFileResponse();
@@ -79,6 +88,71 @@ async function serveFile(filePath: string): Promise<Response> {
 function contentType(filePath: string): string {
   const extension = filePath.match(/\.[^.]+$/)?.[0] ?? "";
   return CONTENT_TYPES[extension] ?? "application/octet-stream";
+}
+
+interface AppSettings {
+  colorScheme: string;
+}
+
+async function settingsResponse(req: Request): Promise<Response> {
+  if (req.method === "GET") {
+    return Response.json({ settings: await readSettings() });
+  }
+
+  if (req.method === "PUT") {
+    try {
+      const body = await req.json();
+      const settings = normalizeSettings(body);
+      await writeSettings(settings);
+      return Response.json({ settings });
+    } catch (error) {
+      return Response.json(
+        { error: error instanceof Error ? error.message : String(error) },
+        { status: 400 },
+      );
+    }
+  }
+
+  return new Response("Method not allowed", {
+    status: 405,
+    headers: { allow: "GET, PUT" },
+  });
+}
+
+async function readSettings(): Promise<AppSettings> {
+  try {
+    const text = await Deno.readTextFile(SETTINGS_FILE);
+    return normalizeSettings(JSON.parse(text));
+  } catch (error) {
+    if (
+      error instanceof Deno.errors.NotFound ||
+      error instanceof SyntaxError
+    ) {
+      return DEFAULT_SETTINGS;
+    }
+
+    throw error;
+  }
+}
+
+async function writeSettings(settings: AppSettings): Promise<void> {
+  await Deno.mkdir(SETTINGS_DIR, { recursive: true });
+  await Deno.writeTextFile(
+    SETTINGS_FILE,
+    `${JSON.stringify(normalizeSettings(settings), null, 2)}\n`,
+  );
+}
+
+function normalizeSettings(value: unknown): AppSettings {
+  const settings = value && typeof value === "object"
+    ? value as Partial<AppSettings>
+    : {};
+
+  return {
+    colorScheme: typeof settings.colorScheme === "string"
+      ? settings.colorScheme
+      : DEFAULT_SETTINGS.colorScheme,
+  };
 }
 
 async function initialFileResponse(): Promise<Response> {
@@ -156,6 +230,11 @@ function isMarkdown(path: string): boolean {
 
 function cwdUrl(): URL {
   return new URL(`file://${Deno.cwd().replaceAll("\\", "/")}/`);
+}
+
+function homeUrl(): URL {
+  const home = Deno.env.get("HOME") ?? Deno.cwd();
+  return new URL(`file://${home.replaceAll("\\", "/")}/`);
 }
 
 function ensureTrailingSlash(url: URL): URL {

@@ -36,7 +36,7 @@ function App() {
   const [selectedBlockId, setSelectedBlockId] = useState("");
   const [writeSource, setWriteSource] = useState(sampleMermaid);
   const [colorScheme, setColorScheme] = useState(colorSchemes[0].id);
-  const [fileError, setFileError] = useState("");
+  const settingsLoadedRef = useRef(false);
   const selectedBlock = blocks.find((block) => block.id === selectedBlockId) ??
     null;
   const selectedScheme =
@@ -51,26 +51,46 @@ function App() {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadInitialFile() {
+    async function loadStartupState() {
       try {
-        const response = await fetch("/api/initial-file");
-        if (!response.ok) return;
+        const settingsResponse = await fetch("/api/settings");
+        if (settingsResponse.ok) {
+          const data = await settingsResponse.json();
+          if (!cancelled && isKnownColorScheme(data.settings?.colorScheme)) {
+            setColorScheme(data.settings.colorScheme);
+          }
+        }
+      } catch {
+        // The Vite dev server does not provide desktop settings.
+      }
 
-        const data = await response.json();
+      settingsLoadedRef.current = true;
+
+      try {
+        const fileResponse = await fetch("/api/initial-file");
+        if (!fileResponse.ok) return;
+
+        const data = await fileResponse.json();
         if (cancelled || !data.file?.text) return;
 
         loadMarkdownText(data.file.name, data.file.text);
       } catch {
-        // The Vite dev server does not provide this endpoint.
+        // The Vite dev server does not provide the initial file endpoint.
       }
     }
 
-    loadInitialFile();
+    loadStartupState();
 
     return () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!settingsLoadedRef.current) return;
+
+    saveSettings({ colorScheme });
+  }, [colorScheme]);
 
   async function handleFileChange(event) {
     const file = event.currentTarget.files?.[0];
@@ -81,37 +101,11 @@ function App() {
     loadMarkdownText(file.name, text);
   }
 
-  async function handleLoadPath(path) {
-    const trimmed = path.trim();
-    if (!trimmed) {
-      setFileError("Enter a Markdown file or directory path.");
-      return;
-    }
-
-    try {
-      setFileError("");
-      const response = await fetch(
-        "/api/read-markdown?path=" + encodeURIComponent(trimmed),
-      );
-      const data = await response.json();
-
-      if (!response.ok || !data.file?.text) {
-        setFileError(data.error ?? "Markdown file was not found.");
-        return;
-      }
-
-      loadMarkdownText(data.file.name, data.file.text);
-    } catch {
-      setFileError("Path loading is available in the desktop app.");
-    }
-  }
-
   function loadMarkdownText(name, text) {
     const extracted = extractMermaidBlocks(text);
     setFileName(name);
     setBlocks(extracted);
     setSelectedBlockId(extracted[0]?.id ?? "");
-    setFileError("");
     setActiveTab("files");
   }
 
@@ -152,10 +146,8 @@ function App() {
         ? h(FilesTab, {
           blocks,
           fileName,
-          fileError,
           selectedBlockId,
           onFileChange: handleFileChange,
-          onLoadPath: handleLoadPath,
           onSelectBlock: setSelectedBlockId,
         })
         : h(WriteTab, {
@@ -170,6 +162,22 @@ function App() {
       h(MermaidPreview, { source: previewSource, scheme: selectedScheme }),
     ),
   );
+}
+
+async function saveSettings(settings) {
+  try {
+    await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+  } catch {
+    // Settings persistence is only available in the desktop app.
+  }
+}
+
+function isKnownColorScheme(value) {
+  return colorSchemes.some((scheme) => scheme.id === value);
 }
 
 function SettingsMenu({ schemes, selectedScheme, onSelect }) {
@@ -315,15 +323,11 @@ function FilesTab(
   {
     blocks,
     fileName,
-    fileError,
     selectedBlockId,
     onFileChange,
-    onLoadPath,
     onSelectBlock,
   },
 ) {
-  const [path, setPath] = useState(".");
-
   async function handleDrop(event) {
     event.preventDefault();
     const file = event.dataTransfer?.files?.[0];
@@ -343,31 +347,23 @@ function FilesTab(
     h(
       "div",
       { className: "file-picker-row" },
-      h("input", {
-        className: "path-input",
-        type: "text",
-        value: path,
-        placeholder: "./SAMPLE.md or .",
-        onInput: (event) => setPath(event.currentTarget.value),
-        onKeyDown: (event) => {
-          if (event.key === "Enter") onLoadPath(path);
-        },
-        "aria-label": "Markdown file or directory path",
-      }),
       h(
-        "button",
-        {
-          type: "button",
-          className: "path-load-button",
-          onClick: () => onLoadPath(path),
-        },
-        "Load",
+        "label",
+        { className: "browse-button" },
+        h("span", null, "Choose File"),
+        h("input", {
+          className: "browse-input",
+          type: "file",
+          accept: ".md,.markdown,text/markdown,text/plain",
+          onChange: onFileChange,
+          "aria-label": "Browse Markdown",
+        }),
       ),
     ),
     h(
       "p",
-      { className: fileError ? "path-message is-error" : "path-message" },
-      fileError || "Enter a Markdown path, or drop a Markdown file here.",
+      { className: "path-message" },
+      "Choose a Markdown file, or drop one here.",
     ),
     h(
       "div",

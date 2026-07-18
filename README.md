@@ -27,7 +27,7 @@ deno task desktop
 
 ```sh
 deno task build
-deno desktop --allow-read --include=./dist --output ./build/MermaidReviewer.app desktop.ts
+deno desktop --backend=cef --allow-read --allow-write --allow-env=HOME --include=./dist --output ./build/MermaidReviewerCEF.app desktop.ts
 ```
 
 CLIとして使いたい場合は、グローバルコマンド `reviwers` をインストールできます。
@@ -46,7 +46,7 @@ reviwers ./SAMPLE.md
 引数には Markdown ファイル、または Markdown
 ファイルを含むディレクトリを指定できます。ディレクトリを指定した場合は、その中の最初の
 `.md` / `.markdown` ファイルを起動時に読み込みます。 macOSでは `reviwers` が
-`./build/MermaidReviewer.app` を生成した後、`open` でアプリを起動します。
+`./build/MermaidReviewerCEF.app` を生成した後、`open` でアプリを起動します。
 
 ## 目的
 
@@ -61,8 +61,8 @@ reviwers ./SAMPLE.md
 画面は大きく左右 2 ペインで構成します。
 
 - 左ペイン: 画面幅の約 1/3
-  - `Files` タブ: Markdown ファイル/ディレクトリのパスを入力して、含まれる
-    Mermaid コードブロックを一覧化して切り替える
+  - `Files` タブ: Markdown ファイルを選択して、含まれる Mermaid
+    コードブロックを一覧化して切り替える
   - `Files` タブ: Markdown ファイルのドラッグ&ドロップにも対応
   - `Write` タブ: Mermaid を直接入力し、ライブプレビューする
 - 右ペイン: 画面幅の約 2/3
@@ -117,6 +117,7 @@ deno task dev
 deno task build
 deno task preview
 deno task desktop:hmr
+deno task desktop:webview
 deno task install:cli
 deno test
 ```
@@ -126,7 +127,31 @@ deno test
 をローカルHTTPで配信します。`cli.ts` は `reviwers .`
 のようなコマンド起動用の薄いラッパーで、Vite build 後に `desktop.ts` を
 entrypoint として Deno Desktop を起動します。
-デスクトップ起動時の初期ウィンドウサイズは `1100x760` に設定しています。
+デスクトップ起動時の初期ウィンドウサイズは `1100x760` に設定しています。 Deno
+Desktop の標準WebViewでは file picker が動かないため、現時点では CEF backend
+を正式ルートにしています。WebView backendを切り分けたい場合は以下を使います。
+
+```sh
+deno task desktop:webview
+```
+
+`desktop:webview` は `--backend=cef` を付けず、出力先を
+`./build/MermaidReviewer.app` に分けます。
+
+## Settings
+
+アプリ設定はローカルの `~/.reviewers/settings.json` に保存します。
+
+現在保存する項目:
+
+```json
+{
+  "colorScheme": "graphite"
+}
+```
+
+カラースキーマを変更すると自動保存され、次回起動時に復元されます。設定保存のため、Desktop起動タスクには
+`--allow-write` と `--allow-env=HOME` を付与しています。
 
 Preact、Mermaid、lucide-preact、Vite などの依存は `deno.json` の `imports`
 でバージョン固定します。`package.json` は Deno Desktop / Vite
